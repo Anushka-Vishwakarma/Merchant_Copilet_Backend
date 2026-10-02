@@ -1,0 +1,401 @@
+For **WooCommerce**, use the same research method as Shopify, but the current official API is a little different: WooCommerce recommends the **REST API v3** for new integrations, using `/wp-json/wc/v3/` endpoints. It provides resources such as customers, orders, products, payment gateways, shipping zones, and webhooks. ([The WooCommerce Developer Blog][1])
+
+## 1. Main WooCommerce data you need
+
+For Merchant Co-Pilot, investigate these resources:
+
+| WooCommerce resource    | Merchant Co-Pilot use            |
+| ----------------------- | -------------------------------- |
+| **Customers**           | Customer history + churn         |
+| **Orders**              | Main commerce data + RTO         |
+| **Order line items**    | Products purchased               |
+| **Products**            | Product information              |
+| **Refunds**             | Order outcome/financial analysis |
+| **Payment information** | RTO/payment features             |
+| **Shipping/Billing**    | Geography                        |
+| **Webhooks**            | Continuous synchronization       |
+
+---
+
+## 2. Customer data
+
+Research the **Customers API** and record:
+
+```text
+Customer
+├── Customer ID
+├── Date created
+├── Date modified
+├── Email
+├── Name
+├── Billing information
+├── Shipping information
+├── Number of orders
+└── Total spent
+```
+
+WooCommerce's customer API exposes customer information including ID, dates, email, billing/shipping information, order count and total spent. ([The WooCommerce Developer Blog][2])
+
+Then Merchant Co-Pilot can **calculate**:
+
+```text
+total_orders
+total_spend
+first_order_date
+last_order_date
+recency
+frequency
+monetary_value
+average_order_value
+previous_rto_count
+```
+
+Those calculated values are your **features**, not raw WooCommerce data.
+
+---
+
+# 3. Order data — most important
+
+WooCommerce's current Order API exposes fields including:
+
+* ID
+* Order number
+* Creation date
+* Updated date
+* Completion date
+* Status
+* Currency
+* Total
+* Subtotal
+* Tax
+* Shipping
+* Payment information
+* Billing
+* Shipping
+* Customer
+* Line items
+
+The official order documentation lists these properties and their types. ([The WooCommerce Developer Blog][3])
+
+For your research sheet:
+
+| WooCommerce field/concept | Merchant Co-Pilot purpose    |
+| ------------------------- | ---------------------------- |
+| `id`                      | Order identification         |
+| `number`                  | Merchant-facing order number |
+| `date_created`            | Time-based features          |
+| `date_modified`           | Synchronization              |
+| `status`                  | Order outcome                |
+| `currency`                | Financial calculations       |
+| `total`                   | RTO/RFM                      |
+| `total_tax`               | Financial analysis           |
+| `total_shipping`          | ₹ impact                     |
+| `payment_method`          | RTO                          |
+| `customer_id`             | Customer relationship        |
+| `billing`                 | Customer information         |
+| `shipping`                | Delivery geography           |
+| `line_items`              | Products purchased           |
+
+---
+
+# 4. Order Item / Line Item
+
+An order can contain multiple items, so your common database should have:
+
+```text
+Order
+   │
+   ├── OrderItem
+   ├── OrderItem
+   └── OrderItem
+```
+
+Research these WooCommerce fields:
+
+* Product ID
+* Variation ID
+* Quantity
+* Price
+* Tax
+* Total
+* SKU/product information
+
+This maps to the **OrderItem** entity in your Merchant Co-Pilot common model. 
+
+---
+
+# 5. Product data
+
+Research the WooCommerce **Products API**.
+
+Important fields include:
+
+```text
+Product
+├── ID
+├── Name
+├── Type
+├── Status
+├── SKU
+├── Price
+├── Categories
+├── Created date
+└── Updated date
+```
+
+The official documentation identifies fields such as product ID, title/name, type, status, SKU and creation/update information. ([WooCommerce][4])
+
+For Merchant Co-Pilot, don't automatically store every product field. Store what your requirements actually use.
+
+---
+
+# 6. Payment data
+
+WooCommerce exposes payment-related information through its order data and also provides a Payment Gateways API. ([The WooCommerce Developer Blog][1])
+
+For your RTO project, investigate:
+
+```text
+Payment
+├── Payment method
+├── Payment method title
+├── Transaction/reference information
+├── Payment status/outcome
+└── Amount
+```
+
+Your project specifically needs payment information such as COD status for RTO prediction. 
+
+**Important:** Don't assume every WooCommerce store will represent COD identically. Your mapping sheet should record the actual API value and how you normalize it.
+
+---
+
+# 7. Shipping & geography
+
+Research the order's:
+
+```text
+Shipping
+├── Country
+├── State
+├── City
+├── Postal code
+└── Shipping method
+```
+
+You need this because your RTO model uses **delivery-area patterns**. 
+
+---
+
+# 8. Order status vs RTO
+
+This is an important research point.
+
+WooCommerce has standard order statuses such as:
+
+```text
+pending
+processing
+on-hold
+completed
+cancelled
+refunded
+failed
+trash
+```
+
+([The WooCommerce Developer Blog][3])
+
+But **RTO is not automatically the same thing as one of those standard statuses**.
+
+So don't design:
+
+```text
+status = RTO
+```
+
+without investigating the actual merchant workflow.
+
+Instead, your integration should eventually normalize source information into something like:
+
+```text
+delivery_outcome
+----------------
+DELIVERED
+RTO
+RETURNED
+CANCELLED
+UNKNOWN
+```
+
+Only mark something as RTO when your source/integration actually provides enough evidence.
+
+---
+
+# 9. Refund information
+
+WooCommerce's API supports order refunds, which can be useful for your financial/order-outcome analysis. ([WooCommerce][4])
+
+Research:
+
+```text
+Refund
+├── Refund ID
+├── Order ID
+├── Amount
+├── Reason
+└── Date
+```
+
+Whether you need all of these in the final database should be decided after your requirements analysis.
+
+---
+
+# 10. Webhooks — very important for production
+
+WooCommerce supports webhooks for:
+
+* Customer created/updated/deleted
+* Order created/updated/deleted
+* Product created/updated/deleted
+
+([The WooCommerce Developer Blog][5])
+
+The webhook payload for API resources is JSON, and WooCommerce includes an HMAC-SHA256 signature so your application can verify the payload. ([The WooCommerce Developer Blog][5])
+
+So your production synchronization can be:
+
+```text
+WooCommerce
+     │
+     ├── REST API
+     │      ↓
+     │   Historical data
+     │
+     └── Webhooks
+            ↓
+        New/updated data
+            ↓
+     Merchant Co-Pilot
+            ↓
+       PostgreSQL
+```
+
+---
+
+# 11. Pagination
+
+When downloading historical data, you cannot assume one API request returns everything.
+
+WooCommerce's REST API supports pagination using parameters such as `per_page` and `page`; response headers provide total resources and total pages. ([The WooCommerce Developer Blog][6])
+
+So your integration needs:
+
+```text
+Request page 1
+      ↓
+Request page 2
+      ↓
+Request page 3
+      ↓
+...
+      ↓
+All required historical records
+```
+
+This matters for your RFM, churn and previous-RTO calculations.
+
+---
+
+# 12. Authentication
+
+For your research, record **how Merchant Co-Pilot authenticates with each store**.
+
+WooCommerce's REST API uses authenticated API access, and the official documentation describes REST API authentication and HTTPS usage. ([The WooCommerce Developer Blog][6])
+
+Your database should **not store raw API secrets casually**.
+
+Your project already requires integration credentials to be protected/encrypted and tenant-scoped. 
+
+---
+
+# 13. Your WooCommerce Data Dictionary
+
+Create this spreadsheet:
+
+| WooCommerce source | Exact field    | Type           | Example       | Nullable? | Merchant Co-Pilot field | Purpose            |
+| ------------------ | -------------- | -------------- | ------------- | --------- | ----------------------- | ------------------ |
+| Customer           | `id`           | Integer        | 123           | No        | `customer_id`           | Customer ID        |
+| Customer           | `email`        | String         | ...           | ?         | `email`                 | Customer           |
+| Customer           | `date_created` | DateTime       | ...           | ?         | `created_at`            | Customer lifecycle |
+| Order              | `id`           | Integer        | 5001          | No        | `order_id`              | Order ID           |
+| Order              | `date_created` | DateTime       | ...           | No        | `order_date`            | RFM                |
+| Order              | `status`       | String         | processing    | No        | `order_status`          | Outcome            |
+| Order              | `total`        | Decimal/String | 1500          | No        | `order_value`           | RTO/RFM            |
+| Order              | payment method | String         | ...           | ?         | `payment_type`          | RTO                |
+| Order              | shipping       | Object         | ...           | ?         | address                 | Geography          |
+| Order              | line items     | Array          | ...           | No        | OrderItem               | Product            |
+| Product            | `id`           | Integer        | 45            | No        | `product_id`            | Product            |
+| Product            | `sku`          | String         | ABC01         | ?         | `sku`                   | Product            |
+| Webhook            | topic          | String         | order.updated | No        | sync event              | Synchronization    |
+
+**Don't fill the `?` values by guessing.** Verify each field against the current WooCommerce documentation or an actual test response.
+
+---
+
+# 14. WooCommerce → Merchant Co-Pilot
+
+Your final architecture should look like this:
+
+```text
+                WOOCOMMERCE
+                     │
+       ┌─────────────┼─────────────┐
+       ↓             ↓             ↓
+   Customers       Orders       Products
+                     │
+              ┌──────┴──────┐
+              ↓             ↓
+         Line Items      Payment
+              │
+              ↓
+         Fulfillment/
+          Shipping
+              │
+              ▼
+       NORMALIZATION
+              │
+              ▼
+     MERCHANT CO-PILOT
+              │
+       ┌──────┼───────┐
+       ↓      ↓       ↓
+      RTO   Churn  Marketing
+       │      │       │
+       └──────┼───────┘
+              ↓
+       Explanation
+              ↓
+          ₹ Impact
+              ↓
+       Recommendation
+```
+
+This matches your project's requirement that Shopify/WooCommerce records be mapped into common **Customer, Order, OrderItem and Product** entities. 
+
+### The key research conclusion
+
+For WooCommerce, your first-party source data should primarily be researched through:
+
+**REST API v3 → Customers + Orders + Products + Order items + payment/order information + shipping + refunds + Webhooks.**
+
+The current official documentation explicitly identifies REST API v3 as the recommended version for new integrations. ([The WooCommerce Developer Blog][1])
+
+After this, you have enough information to make the **Shopify vs WooCommerce comparison/data-mapping table**, which is the step immediately before designing your common Merchant Co-Pilot database.
+
+[1]: https://developer.woocommerce.com/docs/apis/rest-api/v3/?utm_source=chatgpt.com "REST API v3 | WooCommerce developer docs"
+[2]: https://developer.woocommerce.com/docs/apis/?utm_source=chatgpt.com "Getting Started with WooCommerce APIs | WooCommerce developer docs"
+[3]: https://developer.woocommerce.com/docs/apis/rest-api/v3/orders/?utm_source=chatgpt.com "Orders | WooCommerce developer docs"
+[4]: https://woocommerce.github.io/woocommerce-rest-api-docs/v3.html?utm_source=chatgpt.com "WooCommerce REST API Documentation v3"
+[5]: https://developer.woocommerce.com/docs/apis/rest-api/v3/webhooks/?utm_source=chatgpt.com "Webhooks | WooCommerce developer docs"
+[6]: https://developer.woocommerce.com/docs/apis/rest-api/?utm_source=chatgpt.com "WooCommerce REST API | WooCommerce developer docs"

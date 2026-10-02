@@ -1,0 +1,267 @@
+Absolutely. If you want to **research Shopify and WooCommerce data yourself for free**, do it systematically rather than randomly searching. Here’s a practical research workflow for your Merchant Co-Pilot.
+
+## Step 1 — Start with official developer documentation
+
+Use only the official documentation initially.
+
+* [Shopify API documentation](https://shopify.dev/docs/api?utm_source=chatgpt.com)
+* [WooCommerce API documentation](https://developer.woocommerce.com/docs/apis/?utm_source=chatgpt.com)
+
+Shopify's current app APIs include the GraphQL Admin API, which can access products, customers, orders, inventory and other store data. ([Shopify][1])
+
+WooCommerce's current REST API is **v3** for new integrations and supports resources including customers, orders and products. ([The WooCommerce Developer Blog][2])
+
+---
+
+## Step 2 — Make a list of data you need
+
+Before looking at API fields, make your own requirement list.
+
+For Merchant Co-Pilot:
+
+```text
+STORE
+├── Store information
+├── Platform
+└── Integration status
+
+CUSTOMER
+├── Customer ID
+├── Location
+├── Created date
+└── Purchase history
+
+ORDER
+├── Order ID
+├── Customer
+├── Date
+├── Amount
+├── Payment
+├── Status
+├── Shipping
+└── Fulfillment
+
+ORDER ITEM
+├── Product
+├── Quantity
+└── Price
+
+PRODUCT
+├── Product ID
+├── Name
+├── Category
+└── Price
+
+MARKETING
+├── Source
+├── Medium
+├── Campaign
+├── UTM
+└── Spend
+```
+
+This matches your project's common entities: **Customer, Order, OrderItem and Product**. 
+
+---
+
+## Step 3 — Research Shopify separately
+
+On the Shopify documentation, investigate:
+
+1. **Orders**
+2. **Customers**
+3. **Products**
+4. **Order line items**
+5. **Fulfillment**
+6. **Payment/financial information**
+7. **Webhooks/events**
+8. **Authentication/scopes**
+9. **Pagination**
+10. **Development stores**
+
+Shopify's order documentation, for example, shows that an order connects customer, product/line-item, payment and fulfillment information. ([Shopify][3])
+
+For each resource, record:
+
+```text
+Resource:
+API:
+Field:
+Data type:
+Required/optional:
+Example:
+Permission:
+Merchant Co-Pilot use:
+```
+
+---
+
+## Step 4 — Research WooCommerce separately
+
+Do exactly the same thing for WooCommerce.
+
+Start with:
+
+* Orders
+* Customers
+* Products
+* Order items
+* Shipping
+* Payment
+* API authentication
+* Pagination
+* Webhooks
+
+WooCommerce's order API documents fields such as `id`, `status`, `currency`, creation date and other order information. ([The WooCommerce Developer Blog][4])
+
+Its customer API includes fields such as customer ID, email, billing/shipping information, order count and total spent. ([The WooCommerce Developer Blog][5])
+
+---
+
+## Step 5 — Actually look at the JSON
+
+This is **very important**.
+
+Don't just read documentation.
+
+You need to understand what the actual API response looks like.
+
+For example, WooCommerce documents JSON responses and gives examples of requests/responses. ([The WooCommerce Developer Blog][6])
+
+You want to learn to recognize:
+
+```json
+{
+  "id": 123,
+  "status": "processing",
+  "currency": "INR",
+  "date_created": "...",
+  "line_items": [],
+  "shipping": {},
+  "billing": {}
+}
+```
+
+You don't need to use this exact example in your database. You're studying the **shape of the source data**.
+
+---
+
+## Step 6 — Create your Data Mapping Sheet
+
+This is probably the **most useful document for your project**.
+
+Create an Excel/Google Sheet like this:
+
+| Merchant Co-Pilot field | Shopify field | WooCommerce field | Type     | Required | Purpose               |
+| ----------------------- | ------------- | ----------------- | -------- | -------- | --------------------- |
+| `order_id`              | ?             | `id`              | ID       | Yes      | Order identification  |
+| `order_date`            | ?             | `date_created`    | DateTime | Yes      | RFM/time features     |
+| `order_status`          | ?             | `status`          | String   | Yes      | Order outcome         |
+| `currency`              | ?             | `currency`        | String   | Yes      | Monetary values       |
+| `customer_id`           | ?             | ?                 | ID       | Yes      | Customer relationship |
+| `order_value`           | ?             | ?                 | Decimal  | Yes      | RTO/RFM               |
+| `payment_type`          | ?             | ?                 | String   | Yes      | RTO                   |
+| `postcode`              | ?             | ?                 | String   | Maybe    | Geography             |
+| `product_id`            | ?             | ?                 | ID       | Yes      | Product relationship  |
+
+**Do not put a value in the Shopify column until you verify it in the official documentation.**
+
+That way, your research becomes evidence-based rather than guesswork.
+
+---
+
+## Step 7 — Check “how do we get new data?”
+
+Your project needs both **initial historical import** and **ongoing synchronization**. 
+
+Research:
+
+```text
+Initial:
+Shopify/WooCommerce
+       ↓
+Historical API data
+       ↓
+Merchant Co-Pilot DB
+
+Continuous:
+New/updated order
+       ↓
+Webhook/event OR API sync
+       ↓
+Merchant Co-Pilot DB
+```
+
+Shopify documents both events/webhooks and API-based access to store data. ([Shopify][1])
+
+---
+
+## Step 8 — Check free development/testing
+
+For **Shopify**, investigate development stores. Shopify explicitly describes development stores as stores with test data that can be used for building and testing. ([Shopify][1])
+
+For **WooCommerce**, you can study the API documentation first and, when you need hands-on testing, use a test/local WooCommerce installation. The official documentation explains API keys and making REST API requests. ([The WooCommerce Developer Blog][6])
+
+So you don't need to start by paying for a real merchant's production store.
+
+---
+
+## Step 9 — Record your findings
+
+Make a research document with this structure:
+
+```text
+MERCHANT CO-PILOT
+Platform Data Research
+
+1. Shopify
+   1.1 API used
+   1.2 Authentication
+   1.3 Customers
+   1.4 Orders
+   1.5 Order Items
+   1.6 Products
+   1.7 Fulfillment
+   1.8 Payment information
+   1.9 Webhooks
+   1.10 Limitations
+
+2. WooCommerce
+   2.1 API used
+   2.2 Authentication
+   2.3 Customers
+   2.4 Orders
+   2.5 Order Items
+   2.6 Products
+   2.7 Fulfillment
+   2.8 Payment information
+   2.9 Webhooks
+   2.10 Limitations
+
+3. Shopify vs WooCommerce
+   - Common fields
+   - Different fields
+   - Missing fields
+   - Transformations required
+
+4. Common Merchant Co-Pilot Data Model
+
+5. Database Requirements
+```
+
+### Step 10 — Then design your database
+
+Only **after** completing that mapping should you finalize tables.
+
+Your flow becomes:
+
+**Requirements → API research → Data inventory → Field mapping → Common data model → ER diagram → Database tables → API ingestion → Cleaning → Features → ML**
+
+That is a much more production-like approach than starting with tables and guessing what data Shopify/WooCommerce will provide.
+
+[1]: https://shopify.dev/docs/api?utm_source=chatgpt.com "Shopify APIs, libraries, and tools"
+[2]: https://developer.woocommerce.com/docs/apis/?utm_source=chatgpt.com "Getting Started with WooCommerce APIs | WooCommerce developer docs"
+[3]: https://shopify.dev/docs/api/admin-graphql/latest/objects/Order?utm_source=chatgpt.com "Order - GraphQL Admin"
+[4]: https://developer.woocommerce.com/docs/apis/rest-api/v3/orders/?utm_source=chatgpt.com "Orders | WooCommerce developer docs"
+[5]: https://developer.woocommerce.com/docs/apis/rest-api/v2/customers/?utm_source=chatgpt.com "Customers | WooCommerce developer docs"
+[6]: https://developer.woocommerce.com/docs/apis/rest-api/?utm_source=chatgpt.com "WooCommerce REST API | WooCommerce developer docs"

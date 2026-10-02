@@ -1,0 +1,686 @@
+Yes. For **Merchant Co-Pilot**, “data needed” should be much more detailed than just *customers + orders*. You need to identify **what data enters the system, why you need it, where it comes from, what you store, and what features/models it supports**.
+
+I’ll separate **requirements from your project documents** from **current API research** so you don't accidentally treat assumptions as confirmed platform fields.
+
+## 1. The complete data picture
+
+Your project has six database areas:
+
+1. **D1 — Merchant & Store Data**
+2. **D2 — Commerce & Customer Data**
+3. **D3 — Feature, Prediction & Decision Data**
+4. **D4 — Model & Rule Versions**
+5. **D5 — Audit & Security Logs**
+6. **D6 — Marketing Spend Data** 
+
+And the system has 12 modules covering onboarding, integration, feature engineering, RTO, churn, marketing, explainability, ₹ impact, recommendations, learning, collective learning, and security. 
+
+---
+
+# 2. D1 — Merchant & Store Data
+
+This tells Merchant Co-Pilot **who owns the data and which store it belongs to**.
+
+### Merchant/User
+
+You need:
+
+| Data           | Example                                             | Why             |
+| -------------- | --------------------------------------------------- | --------------- |
+| User ID        | U001                                                | Identify user   |
+| Name           | Merchant name                                       | Account         |
+| Email          | [merchant@example.com](mailto:merchant@example.com) | Login/contact   |
+| Role           | merchant/admin                                      | Authorization   |
+| Account status | active                                              | Account control |
+
+### Store
+
+| Data         | Example       |
+| ------------ | ------------- |
+| `store_id`   | STORE001      |
+| Store name   | ABC Fashion   |
+| Platform     | Shopify       |
+| Store URL    | example store |
+| Currency     | INR           |
+| Time zone    | Asia/Kolkata  |
+| Status       | connected     |
+| Created date | date/time     |
+
+### Integration
+
+You also need to track:
+
+* Platform
+* Connection status
+* Credential/reference
+* Last sync time
+* Sync status
+* Webhook status
+* Integration errors
+
+Your project explicitly requires authenticated `store_id` isolation and integration/security controls. 
+
+---
+
+# 3. D2 — Customer Data
+
+This is one of your **most important datasets**, because customer history is needed for churn and also contributes to RTO features.
+
+### Basic customer information
+
+* Customer ID
+* Store ID
+* Platform customer ID
+* Customer creation date
+* Location
+* Country/state/city
+* Postal code where appropriate
+* Contact information where genuinely needed
+
+WooCommerce's current customer API, for example, exposes customer ID, creation/modification dates, email, name, billing/shipping information, order count and total spent. ([The WooCommerce Developer Blog][1])
+
+### Customer behavioral data
+
+You need to derive:
+
+* Total orders
+* Total spending
+* Last order date
+* First order date
+* Order frequency
+* Average order value
+* Previous RTO count
+* Previous successful deliveries
+* Recency
+* Frequency
+* Monetary value
+
+Your project specifically calls for RFM/customer purchase-history features for churn. 
+
+---
+
+# 4. D2 — Order Data
+
+Orders are probably your **central raw dataset**.
+
+For every order, investigate whether you can obtain:
+
+### Identification
+
+* Internal order ID
+* Platform order ID
+* Store ID
+* Customer ID
+
+### Time
+
+* Order creation date/time
+* Last modified date/time
+* Fulfillment date/time
+* Delivery date/time, if available
+* Cancellation/refund date, if available
+
+### Financial
+
+* Order total
+* Subtotal
+* Discount
+* Tax
+* Shipping cost
+* Currency
+
+### Payment
+
+* Payment method/type
+* Payment status
+* Paid/unpaid indicator
+
+### Status
+
+* Pending
+* Processing
+* Completed
+* Cancelled
+* Refunded
+* Failed
+* Other platform-specific statuses
+
+WooCommerce's current order API documents fields including ID, status, currency, creation date, modification date and payment-related information. ([The WooCommerce Developer Blog][2])
+
+Shopify's Order object is the central object connecting customer, product, payment and fulfillment information. ([Shopify][3])
+
+---
+
+# 5. Order Item Data
+
+One order can contain multiple products.
+
+So don't put everything directly inside the `orders` table.
+
+You need a separate **OrderItem** concept.
+
+Example:
+
+```text
+Order
+  │
+  ├── OrderItem 1 → Product A × 2
+  ├── OrderItem 2 → Product B × 1
+  └── OrderItem 3 → Product C × 4
+```
+
+Data to investigate:
+
+* Order item ID
+* Order ID
+* Product ID
+* Variant ID
+* Quantity
+* Unit price
+* Discount
+* Tax
+* Line total
+
+WooCommerce's order API, for example, includes line items with product references and quantities. ([The WooCommerce Developer Blog][4])
+
+---
+
+# 6. Product Data
+
+You need product information because customer behavior can depend on what was purchased.
+
+Investigate:
+
+* Product ID
+* Platform product ID
+* Product name
+* SKU
+* Category
+* Product type
+* Price
+* Status
+* Variant
+* Inventory information, if needed
+* Creation date
+* Modification date
+
+WooCommerce's current product API documents fields including product ID, name, slug, dates, type and status. ([The WooCommerce Developer Blog][5])
+
+For Merchant Co-Pilot, **don't collect every product field just because the API provides it**. Keep fields that support your stated project objectives.
+
+---
+
+# 7. Fulfillment & Delivery Data
+
+This is especially important for your **RTO model**.
+
+Investigate whether the platform/integration provides:
+
+* Fulfillment status
+* Shipment status
+* Shipping method
+* Delivery status
+* Tracking information/reference
+* Delivery location
+* Shipping address
+* Cancellation
+* Return
+* Refund
+* Failed delivery
+* RTO/returned outcome
+
+Your project specifically identifies **delivery-area patterns and previous RTO behavior** as RTO inputs. 
+
+### Important distinction
+
+Don't assume:
+
+```text
+order status = RTO
+```
+
+An e-commerce platform may have statuses that don't directly represent your project's RTO definition.
+
+You need to define your own normalized outcome, for example:
+
+```text
+DELIVERED
+CANCELLED
+RETURNED
+RTO
+UNKNOWN
+```
+
+**only after verifying what source data is actually available.**
+
+---
+
+# 8. Geography Data
+
+For your RTO analysis, investigate:
+
+* Country
+* State
+* City
+* Postal/PIN code
+* Shipping location
+* Billing location
+
+Your project mentions **delivery-area patterns** as an RTO signal. 
+
+For privacy, only keep the geographic precision that is actually needed for the model.
+
+---
+
+# 9. Marketing Data — D6
+
+Marketing is another major dataset.
+
+Your project explicitly mentions:
+
+* UTM source
+* UTM medium
+* UTM campaign
+* Acquisition cohort
+* Observed LTV
+* Repeat purchases
+* Acquisition cost, when available
+* Channel/cohort efficiency 
+
+So your marketing data could conceptually look like:
+
+```text
+MarketingCampaign
+-----------------
+campaign_id
+store_id
+source
+medium
+campaign
+date
+spend
+```
+
+And attribution/cohort information:
+
+```text
+Attribution
+-----------
+customer_id
+store_id
+source
+medium
+campaign
+first_touch
+date
+```
+
+But **don't assume Shopify/WooCommerce alone provides all marketing-spend information**. Your DFD separately identifies marketing/ad platforms as external entities, including Google, Meta, Organic and Referral. 
+
+So marketing may require **separate integrations/data sources**.
+
+---
+
+# 10. Feature Data — D3
+
+This is data you **calculate yourself** from raw data.
+
+For example:
+
+### RTO features
+
+```text
+is_cod
+order_value
+previous_rto_count
+previous_order_count
+customer_rto_rate
+delivery_area_pattern
+```
+
+### Churn features
+
+```text
+recency
+frequency
+monetary_value
+total_orders
+average_order_value
+purchase_interval
+customer_lifetime
+```
+
+### Marketing features
+
+```text
+acquisition_source
+campaign
+cohort
+observed_ltv
+repeat_purchase_rate
+acquisition_cost
+```
+
+Your project requires point-in-time feature snapshots so that information from after the prediction moment isn't accidentally used. 
+
+That's a **critical requirement**.
+
+---
+
+# 11. Prediction Data — D3
+
+After feature generation, your system generates new data.
+
+For RTO:
+
+```text
+prediction_id
+store_id
+order_id
+model_version
+probability
+risk_category
+confidence
+prediction_time
+```
+
+For churn:
+
+```text
+prediction_id
+store_id
+customer_id
+model_version
+probability
+risk_category
+confidence
+prediction_time
+```
+
+The exact column list above is a **recommended implementation**, not a field list explicitly specified by your source documents.
+
+Your DFD confirms that RTO risk score, churn risk score, predictions and model versions are data flows. 
+
+---
+
+# 12. Explainability Data
+
+Your system isn't supposed to say only:
+
+> "RTO risk = high."
+
+It needs to explain why.
+
+The project specifies logistic-regression feature contributions using:
+
+**contribution = weight × normalized feature value**
+
+and ranking contributions by absolute magnitude. 
+
+So you need to retain information such as:
+
+```text
+prediction_id
+feature_name
+feature_value
+contribution
+direction
+rank
+model_version
+explanation
+```
+
+Again, these are recommended database fields based on the project's explainability requirement.
+
+---
+
+# 13. ₹ Impact Data
+
+The system also needs financial assumptions.
+
+For RTO:
+
+* RTO probability
+* Shipping cost
+* Reverse logistics cost
+* Other applicable cost assumptions
+* Lower estimate
+* Upper estimate
+
+For churn:
+
+* Expected/historical customer value
+* Revenue exposure
+* Lower estimate
+* Upper estimate
+
+The project specifically requires conservative ranges and tracking of assumptions. 
+
+---
+
+# 14. Recommendation Data
+
+The recommendation engine needs:
+
+```text
+Risk / prediction
+       ↓
+Business rule
+       ↓
+Recommendation
+       ↓
+Priority
+       ↓
+Merchant action
+```
+
+The project describes versioned **IF condition → THEN action** rules and recommendation history. 
+
+So investigate/store:
+
+* Rule ID
+* Rule version
+* Condition
+* Action
+* Priority
+* Recommendation
+* Prediction reference
+* Creation/update time
+* Merchant feedback, if implemented
+
+---
+
+# 15. Model Data — D4
+
+You need information about the models themselves:
+
+* Model
+* Model type
+* Model version
+* Training run
+* Training date
+* Feature version
+* Parameters/weights
+* Validation information
+* Active/inactive status
+
+Your project uses **Logistic Regression/SGD** for RTO and churn and requires versioning. 
+
+---
+
+# 16. Learning Data
+
+For incremental learning, the system needs:
+
+```text
+Prediction
+     ↓
+Actual outcome
+     ↓
+Training example
+     ↓
+Model update
+     ↓
+New model version
+```
+
+The project specifies that the actual outcome becomes the label and can be used for an SGD update. 
+
+For simulated collective learning, you additionally need:
+
+* Local model weights
+* Merchant/category association
+* Weight updates
+* Aggregated weights
+* Model version
+
+The project explicitly says only model parameters such as weights/bias are aggregated in its simulated FedAvg approach. 
+
+---
+
+# 17. Security & Audit Data — D5
+
+You need to know:
+
+* Who performed an action
+* Which store it affected
+* What action occurred
+* When it occurred
+* Result/status
+* Security event information
+
+Examples:
+
+```text
+LOGIN
+STORE_CONNECTED
+DATA_SYNC
+PREDICTION_CREATED
+MODEL_UPDATED
+RULE_UPDATED
+ADMIN_ACTION
+```
+
+Your project makes `store_id` the central tenant boundary and requires audit logging and security controls. 
+
+---
+
+# 18. What you should actually collect from Shopify/WooCommerce
+
+For the **first version**, I'd organize your research around this minimum source-data set:
+
+### Shopify / WooCommerce
+
+```text
+STORE
+    ↓
+CUSTOMERS
+    ↓
+ORDERS
+    ↓
+ORDER ITEMS
+    ↓
+PRODUCTS
+    ↓
+PAYMENT
+    ↓
+FULFILLMENT / SHIPPING
+    ↓
+ORDER OUTCOME
+```
+
+Then separately:
+
+```text
+MARKETING PLATFORMS
+    ↓
+CAMPAIGN
+SOURCE
+MEDIUM
+SPEND
+UTM
+COHORT
+```
+
+Then Merchant Co-Pilot calculates:
+
+```text
+RAW DATA
+   ↓
+NORMALIZATION
+   ↓
+FEATURES
+   ↓
+RTO / CHURN / MARKETING
+   ↓
+EXPLANATION
+   ↓
+₹ IMPACT
+   ↓
+RECOMMENDATION
+```
+
+This follows the architecture and data flow described in your project. 
+
+---
+
+# 19. One very important API research finding
+
+While researching the current APIs, there is a significant thing you should record in your **Data Requirements document**:
+
+**Shopify order-history access has an access-scope consideration.** Shopify's current documentation says the Order object requires appropriate order-related access scopes, and older orders beyond the default recent window require additional access. ([Shopify][3])
+
+WooCommerce's current recommended REST API is **v3**, and its REST API provides resources such as customers, orders and products in JSON. ([The WooCommerce Developer Blog][6])
+
+So your research sheet should have a column:
+
+> **“Available through official API + required permission/scope”**
+
+That prevents you from designing your database around data that your application cannot actually obtain.
+
+---
+
+## 20. Your final Data Requirement document
+
+For your project report, I recommend this structure:
+
+```text
+MERCHANT CO-PILOT — DATA REQUIREMENTS
+
+1. Merchant & Store Data
+2. Customer Data
+3. Order Data
+4. Order Item Data
+5. Product Data
+6. Payment Data
+7. Fulfillment & Shipping Data
+8. RTO Outcome Data
+9. Customer Purchase History
+10. Marketing Data
+11. Feature Data
+12. RTO Prediction Data
+13. Churn Prediction Data
+14. Marketing Analysis Data
+15. Explainability Data
+16. ₹ Impact Data
+17. Recommendation Data
+18. Model & Model Version Data
+19. Incremental Learning Data
+20. Collective Learning Data
+21. Authentication & Authorization Data
+22. Audit & Security Data
+23. Integration & Synchronization Data
+```
+
+**Then for every item, document five things:**
+
+> **Data field → Source → Type → Why needed → Where stored**
+
+That five-column exercise is the best next step before you create your ER diagram and PostgreSQL tables.
+
+[1]: https://developer.woocommerce.com/docs/apis/rest-api/v2/customers/?utm_source=chatgpt.com "Customers | WooCommerce developer docs"
+[2]: https://developer.woocommerce.com/docs/apis/rest-api/v3/orders/?utm_source=chatgpt.com "Orders | WooCommerce developer docs"
+[3]: https://shopify.dev/docs/api/admin-graphql/latest/objects/Order?utm_source=chatgpt.com "Order - GraphQL Admin"
+[4]: https://developer.woocommerce.com/docs/apis/rest-api/v2/orders?utm_source=chatgpt.com "Orders | WooCommerce developer docs"
+[5]: https://developer.woocommerce.com/docs/apis/rest-api/v3/products/?utm_source=chatgpt.com "Products | WooCommerce developer docs"
+[6]: https://developer.woocommerce.com/docs/apis/rest-api/v3/?utm_source=chatgpt.com "REST API v3 | WooCommerce developer docs"

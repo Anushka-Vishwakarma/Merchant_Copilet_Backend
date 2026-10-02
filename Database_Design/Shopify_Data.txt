@@ -1,0 +1,412 @@
+Yes. I researched **Shopify’s current official developer documentation**. For Merchant Co-Pilot, this is the useful Shopify data inventory to record.
+
+## 1. Shopify API you should research
+
+For a new Merchant Co-Pilot integration, focus on Shopify's **GraphQL Admin API** and its objects/resources rather than designing your database around Shopify's raw schema.
+
+The important resources for your project are:
+
+| Shopify resource             | Merchant Co-Pilot use                     |
+| ---------------------------- | ----------------------------------------- |
+| **Shop** / store information | D1 Store                                  |
+| **Customer**                 | Customer history, churn                   |
+| **Order**                    | Main commerce data, RTO                   |
+| **LineItem**                 | Products purchased                        |
+| **Product / ProductVariant** | Product information                       |
+| **Fulfillment**              | Shipping/fulfillment/RTO-related analysis |
+| **OrderTransaction**         | Payment transactions                      |
+| **ShippingAddress**          | Delivery geography                        |
+| **Webhooks**                 | Continuous synchronization                |
+
+Shopify's Order object is the central connection between customer, line items, payment and fulfillment information. ([Shopify][1])
+
+---
+
+# 2. Customer data
+
+Research the Shopify **Customer** object and record the fields you actually need.
+
+For Merchant Co-Pilot, your initial requirement should be:
+
+```text
+Customer
+├── Shopify customer ID
+├── Customer creation date
+├── Customer update date
+├── Name
+├── Email/contact information
+├── Billing address
+├── Shipping address
+└── Customer order history
+```
+
+Then derive your own fields:
+
+```text
+total_orders
+total_spend
+first_order_date
+last_order_date
+average_order_value
+purchase_frequency
+recency
+monetary_value
+previous_rto_count
+```
+
+Those derived fields are **Merchant Co-Pilot features**, not Shopify fields.
+
+---
+
+# 3. Order data — very important
+
+Shopify's Order API provides access to order status, customer, line items, financial information and fulfillment information. ([Shopify][1])
+
+For your research sheet, investigate:
+
+```text
+Order
+├── Shopify order ID
+├── Order creation date
+├── Order update date
+├── Order status
+├── Customer
+├── Currency
+├── Total price
+├── Discounts
+├── Taxes
+├── Shipping cost
+├── Shipping address
+├── Line items
+├── Fulfillments
+└── Transactions
+```
+
+Don't immediately create all of these as database columns. First verify the exact Shopify field name and whether your app has permission to access it.
+
+---
+
+# 4. Line Item data
+
+Shopify's **LineItem** represents an individual product/service purchased within an order. It includes information such as the product variant, quantity, pricing and fulfillment status. ([Shopify][2])
+
+For your database research:
+
+```text
+OrderItem
+├── Shopify line item ID
+├── Order ID
+├── Product/variant ID
+├── Quantity
+├── Price
+├── Discount
+├── Tax
+└── Fulfillment status
+```
+
+This maps directly to your project's **OrderItem** entity. 
+
+---
+
+# 5. Product data
+
+Research Shopify's **Product** and **ProductVariant** objects.
+
+You should investigate:
+
+```text
+Product
+├── Product ID
+├── Title/name
+├── Product status
+├── Product type
+├── Vendor
+├── Category
+├── Created date
+├── Updated date
+└── Variants
+
+Variant
+├── Variant ID
+├── SKU
+├── Price
+└── Inventory-related information
+```
+
+Only keep fields that support Merchant Co-Pilot's actual requirements.
+
+---
+
+# 6. Payment data
+
+Shopify provides an **OrderTransaction** object for payment transactions. Shopify describes it as representing payment-related actions such as payment, authorization, capture and refunds. ([Shopify][3])
+
+For your research, investigate:
+
+```text
+Payment / Transaction
+├── Transaction ID
+├── Order ID
+├── Transaction type
+├── Transaction status
+├── Payment gateway
+├── Amount
+├── Currency
+└── Transaction date
+```
+
+This is especially relevant to your **RTO model**, because your project explicitly uses payment/COD information as a predictive input. 
+
+---
+
+# 7. Fulfillment and shipping
+
+Shopify's **Fulfillment** represents shipment of one or more order items and can include carrier, tracking number and tracking URL information. ([Shopify][4])
+
+Research:
+
+```text
+Fulfillment
+├── Fulfillment ID
+├── Order ID
+├── Fulfillment status
+├── Created date
+├── Updated date
+├── Tracking company
+├── Tracking number
+├── Tracking URL
+└── Fulfilled items
+```
+
+This is useful for:
+
+* Delivery analysis
+* RTO analysis
+* Fulfillment performance
+* Order outcome
+
+But remember: **Shopify fulfillment information does not automatically mean you have a clean “RTO = yes/no” field.** You need to determine how your connected merchant's actual delivery/return process represents RTO.
+
+---
+
+# 8. Shipping address / geography
+
+For your project, investigate:
+
+```text
+Shipping Address
+├── Country
+├── State/province
+├── City
+├── Postal/PIN code
+└── Other address fields needed for fulfillment
+```
+
+Shopify documents the order's shipping address as the delivery location for fulfillment; it can be null for orders that don't require shipping. ([Shopify][3])
+
+Your project specifically mentions **delivery-area patterns** as an RTO feature. 
+
+---
+
+# 9. Historical order data — VERY important
+
+This is something you should put in your research report with a red warning.
+
+Shopify's current documentation says the Order query provides the **last 60 days of orders by default**. Accessing older orders requires additional access to all orders. Shopify also recommends bulk operations for large datasets. ([Shopify][1])
+
+That's important because your Merchant Co-Pilot needs **historical customer behavior** for RFM, churn and previous RTO features.
+
+So your requirement becomes:
+
+> **Historical order access must be verified before implementing customer-history-based ML.**
+
+---
+
+# 10. How do we get lots of Shopify data?
+
+Shopify uses **cursor-based pagination** for GraphQL connections. The documented maximum for retrieving resources through a connection is 250 at a time; bulk operations are available for larger datasets. ([Shopify][5])
+
+So your architecture should be:
+
+```text
+Shopify
+   ↓
+GraphQL Admin API
+   ↓
+Pagination / Bulk Operations
+   ↓
+Integration Service
+   ↓
+Normalize
+   ↓
+PostgreSQL
+```
+
+Not:
+
+```text
+Shopify → directly into ML
+```
+
+---
+
+# 11. How do we get NEW orders?
+
+For ongoing synchronization, Shopify provides **webhooks**.
+
+For example, Shopify documents an `orders/create` webhook that sends a payload to your application when an order is created. Webhooks can also be used for other resource changes. ([Shopify][6])
+
+Your production architecture can therefore be:
+
+```text
+                 ┌── Historical data
+Shopify ─────────┤
+                 │
+                 └── Webhooks for changes
+                           ↓
+                    Integration Service
+                           ↓
+                     Normalization
+                           ↓
+                       PostgreSQL
+```
+
+Shopify also recommends verifying webhook HMAC signatures and handling duplicate deliveries. ([Shopify][6])
+
+---
+
+# 12. API permissions
+
+Don't just write:
+
+> "We can access Shopify customer data."
+
+Your research sheet should have:
+
+| Data         | Shopify resource | Required access                     | Verified? |
+| ------------ | ---------------- | ----------------------------------- | --------- |
+| Customer     | Customer         | Check official docs                 | ☐         |
+| Orders       | Order            | `read_orders` etc.                  | ☐         |
+| Transactions | OrderTransaction | `read_orders` etc.                  | ☐         |
+| Fulfillment  | Fulfillment      | Appropriate fulfillment/order scope | ☐         |
+| Products     | Product          | Check current scope                 | ☐         |
+
+For example, Shopify's current documentation explicitly shows that `OrderTransaction` requires `read_orders` or `read_marketplace_orders`, while Fulfillment has several possible access scopes depending on the fulfillment type. ([Shopify][3])
+
+---
+
+# 13. Rate limits
+
+Your production design also needs to account for Shopify API limits.
+
+The GraphQL Admin API uses a **query-cost-based rate limit**, rather than simply “X requests per minute.” Shopify currently documents different restore rates by plan. ([Shopify][7])
+
+Therefore your integration should have:
+
+```text
+API Request
+    ↓
+Rate-limit check
+    ↓
+Request
+    ↓
+If throttled
+    ↓
+Wait / retry
+```
+
+Shopify also recommends requesting only the data your application needs, caching where appropriate, regulating requests and handling errors. ([Shopify][8])
+
+---
+
+# 14. Your Shopify Data Requirement Sheet
+
+This is the document I recommend you create **right now**:
+
+| Merchant Co-Pilot data | Shopify source   | Why we need it                |
+| ---------------------- | ---------------- | ----------------------------- |
+| Store                  | Shop/store APIs  | Merchant/store identification |
+| Customer ID            | Customer         | Customer relationship         |
+| Customer date          | Customer         | Customer lifecycle            |
+| Customer location      | Customer/address | Geography                     |
+| Order ID               | Order            | Order identification          |
+| Order date             | Order            | RFM/time features             |
+| Order status           | Order            | Order outcome                 |
+| Order amount           | Order            | RTO/RFM                       |
+| Currency               | Order            | Monetary calculations         |
+| Payment transaction    | OrderTransaction | Payment analysis              |
+| Shipping address       | Order            | Delivery geography            |
+| Line item              | LineItem         | Purchased products            |
+| Product                | Product          | Product analysis              |
+| Quantity               | LineItem         | Purchase behavior             |
+| Fulfillment            | Fulfillment      | Delivery/fulfillment          |
+| Tracking               | Fulfillment      | Shipment information          |
+| Refund/transaction     | OrderTransaction | Financial/order outcome       |
+| Historical orders      | Order            | Churn/RTO history             |
+| Order updates          | Webhooks         | Continuous synchronization    |
+
+---
+
+# 15. Most important: map Shopify → Merchant Co-Pilot
+
+Don't make your final database Shopify-specific.
+
+Use:
+
+```text
+SHOPIFY
+   │
+   ├── Customer
+   ├── Order
+   ├── LineItem
+   ├── Product
+   ├── Transaction
+   └── Fulfillment
+          │
+          ▼
+   NORMALIZATION LAYER
+          │
+          ▼
+MERCHANT CO-PILOT
+   │
+   ├── Customer
+   ├── Order
+   ├── OrderItem
+   ├── Product
+   └── Commerce/Customer Data
+```
+
+Then later:
+
+```text
+WooCommerce
+      │
+      ▼
+Same normalization layer
+      │
+      ▼
+Same Merchant Co-Pilot database
+```
+
+That's exactly what your project needs: Shopify and WooCommerce records mapped into a **common internal model** rather than building the ML system separately for each platform. 
+
+### Your next research task
+
+For Shopify, don't move to database design yet. **Open each official resource and fill in the exact fields**:
+
+**Customer → Order → LineItem → Product → OrderTransaction → Fulfillment → Address → Webhooks → Permissions.**
+
+For each field record:
+
+**`Shopify field name | data type | example | permission | nullable? | Merchant Co-Pilot field | purpose`**
+
+That spreadsheet becomes your **Shopify Data Dictionary**, and then we can do the same thing for WooCommerce and finally create the common database design.
+
+[1]: https://shopify.dev/docs/api/admin-graphql/latest/queries/order?utm_source=chatgpt.com "order - GraphQL Admin"
+[2]: https://shopify.dev/docs/api/admin-graphql/latest/objects/LineItem?utm_source=chatgpt.com "LineItem - GraphQL Admin"
+[3]: https://shopify.dev/docs/api/admin-graphql/latest/objects/OrderTransaction?utm_source=chatgpt.com "OrderTransaction - GraphQL Admin"
+[4]: https://shopify.dev/docs/api/admin-graphql/latest/objects/fulfillment?utm_source=chatgpt.com "Fulfillment - GraphQL Admin"
+[5]: https://shopify.dev/docs/api/usage/pagination-graphql?utm_source=chatgpt.com "Paginating results with GraphQL"
+[6]: https://shopify.dev/docs/apps/build/webhooks?utm_source=chatgpt.com "About webhooks"
+[7]: https://shopify.dev/docs/apps/build/apis/graphql-admin/rate-limits?utm_source=chatgpt.com "GraphQL Admin API rate limits"
+[8]: https://shopify.dev/docs/api/usage/limits?utm_source=chatgpt.com "Shopify API limits"

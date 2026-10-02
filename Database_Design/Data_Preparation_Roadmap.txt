@@ -1,0 +1,898 @@
+Absolutely. Let's reset the whole thing and make it **very clear and sequential**.
+
+For your **Merchant Co-Pilot**, don't think “database first” in isolation. Think:
+
+> **What data do I need → where does it come from → how do I collect it → how do I store it → how do I clean it → how do I transform it into features → how do I prepare it for ML?**
+
+Your DFD has four broad phases: onboarding/integration, feature engineering/risk prediction, explainability/impact/decisioning, and learning/aggregation/governance. 
+
+# Complete Data → Database → ML Roadmap
+
+```text
+1. Understand requirements
+          ↓
+2. Identify required data
+          ↓
+3. Decide data sources
+          ↓
+4. Create Data Dictionary
+          ↓
+5. Design ER Diagram
+          ↓
+6. Design Database Schema
+          ↓
+7. Set up PostgreSQL + Prisma
+          ↓
+8. Create raw/synthetic dataset
+          ↓
+9. Build data collection/import
+          ↓
+10. Validate incoming data
+          ↓
+11. Deduplicate data
+          ↓
+12. Normalize data
+          ↓
+13. Handle missing/inconsistent data
+          ↓
+14. Store clean data
+          ↓
+15. Create features
+          ↓
+16. Create point-in-time FeatureSnapshots
+          ↓
+17. Create ML training dataset
+          ↓
+18. Time-based train/test split
+          ↓
+19. Train RTO/Churn models
+          ↓
+20. Evaluate models
+          ↓
+21. Prediction → Explanation → ₹ Impact
+          ↓
+22. Recommendation
+          ↓
+23. Incremental learning
+          ↓
+24. Simulated FedAvg
+          ↓
+25. Security + testing
+```
+
+Now let's understand **each step**.
+
+---
+
+# PHASE 1 — Understand exactly what data the project needs
+
+Start by making a list.
+
+Your core data is:
+
+```text
+Store
+User
+Customer
+Product
+Order
+OrderItem
+Payment
+Fulfillment
+Marketing
+```
+
+Then later you have ML/system data:
+
+```text
+FeatureSnapshot
+Prediction
+Explanation
+ImpactEstimate
+Recommendation
+Model
+ModelVersion
+ModelWeight
+Rule
+RuleVersion
+TrainingRun
+AuditLog
+```
+
+Your DFD groups these concepts into six data stores: Merchant/Store, Commerce/Customer, Feature/Prediction/Decision, Model/Rule, Audit/Security, and Marketing Spend. 
+
+---
+
+# PHASE 2 — Decide where the data comes from
+
+You have **three stages of data sourcing**.
+
+### Stage A — Synthetic data
+
+Start here.
+
+Create realistic Shopify/WooCommerce-shaped data yourself.
+
+For example:
+
+```text
+customers.csv
+orders.csv
+order_items.csv
+products.csv
+payments.csv
+fulfillments.csv
+marketing.csv
+```
+
+This lets you build and test the entire system without waiting for a real merchant.
+
+Your project specifically allows realistic synthetic Shopify/WooCommerce-shaped data. 
+
+### Stage B — Public datasets
+
+You can experiment with publicly available e-commerce datasets and map their fields into your schema.
+
+### Stage C — Real Shopify/WooCommerce integration
+
+Eventually:
+
+```text
+Shopify / WooCommerce
+          ↓
+       API/Webhook
+          ↓
+    Integration Layer
+          ↓
+    Common Data Model
+          ↓
+       Database
+```
+
+Your DFD explicitly has Shopify/WooCommerce and marketing/ad platforms as external sources. 
+
+---
+
+# PHASE 3 — Create the Data Dictionary
+
+**Do this before coding the database.**
+
+For every field, record:
+
+```text
+Table
+Column
+Data type
+Required?
+Primary key?
+Foreign key?
+Description
+Example
+Source
+```
+
+Example:
+
+| Table       | Field          | Type    | Required | Meaning                         |
+| ----------- | -------------- | ------- | -------- | ------------------------------- |
+| Customer    | `id`           | UUID    | Yes      | Internal customer ID            |
+| Customer    | `store_id`     | UUID    | Yes      | Merchant/store owner            |
+| Customer    | `external_id`  | String  | Yes      | Shopify/WooCommerce customer ID |
+| Customer    | `city`         | String  | No       | Customer city                   |
+| Order       | `order_value`  | Decimal | Yes      | Total order value               |
+| Order       | `payment_type` | Enum    | Yes      | COD/prepaid                     |
+| Fulfillment | `rto_status`   | Boolean | Yes      | Whether order became RTO        |
+
+This document becomes your **data blueprint**.
+
+---
+
+# PHASE 4 — Design the ER diagram
+
+Now decide relationships.
+
+The main structure is:
+
+```text
+Store
+ │
+ ├── Customer
+ │     │
+ │     └── Order
+ │           ├── OrderItem ── Product
+ │           ├── Payment
+ │           └── Fulfillment
+ │
+ ├── MarketingCampaign
+ │
+ └── Integration
+```
+
+Then ML:
+
+```text
+Order + Customer History
+          ↓
+   FeatureSnapshot
+          ↓
+      Prediction
+       /  |  \
+      ↓   ↓   ↓
+ Explanation
+ Impact
+ Recommendation
+```
+
+And model management:
+
+```text
+Model
+  ↓
+ModelVersion
+  ↓
+ModelWeight
+```
+
+---
+
+# PHASE 5 — Design the actual database
+
+Now turn the ER diagram into tables.
+
+## D1 — Merchant
+
+```text
+users
+stores
+store_users
+store_integrations
+```
+
+## D2 — Commerce
+
+```text
+customers
+products
+orders
+order_items
+payments
+fulfillments
+```
+
+## D3 — Intelligence
+
+```text
+feature_snapshots
+predictions
+explanations
+impact_estimates
+recommendations
+```
+
+## D4 — ML governance
+
+```text
+models
+model_versions
+model_weights
+rules
+rule_versions
+training_runs
+```
+
+## D5 — Security
+
+```text
+audit_logs
+```
+
+## D6 — Marketing
+
+```text
+marketing_campaigns
+marketing_spend
+attributions
+customer_cohorts
+```
+
+That structure follows the six DFD data stores rather than incorrectly making “RTO Module” or “Churn Module” into database tables. 
+
+---
+
+# PHASE 6 — Set up PostgreSQL
+
+Your project's intended stack uses:
+
+```text
+PostgreSQL
+    +
+Prisma
+```
+
+with NestJS handling the public API/data-access layer. 
+
+Your sequence:
+
+```text
+Install PostgreSQL
+       ↓
+Create merchant_copilot database
+       ↓
+Install/configure Prisma
+       ↓
+Write schema.prisma
+       ↓
+Create migration
+       ↓
+Create tables
+       ↓
+Add PK/FK/unique constraints
+       ↓
+Add indexes
+```
+
+**Don't start ML before this works.**
+
+---
+
+# PHASE 7 — Create your first dataset
+
+For development, create synthetic data.
+
+Start small:
+
+```text
+10 stores
+1,000 customers
+5,000 orders
+2,000 products
+10,000 order items
+5,000 payment records
+5,000 fulfillment records
+1,000 marketing records
+```
+
+You don't need millions of rows initially.
+
+The important thing is that the data contains **realistic relationships**.
+
+For example:
+
+```text
+Customer C001
+       ↓
+Order O1001
+       ↓
+OrderItem OI5001
+       ↓
+Product P001
+```
+
+Not random unrelated IDs.
+
+---
+
+# PHASE 8 — Data collection/import
+
+Now create the ingestion pipeline.
+
+### For synthetic data
+
+```text
+CSV/JSON
+  ↓
+Import script
+  ↓
+Validation
+  ↓
+Normalization
+  ↓
+PostgreSQL
+```
+
+### For Shopify/WooCommerce
+
+```text
+API
+ ↓
+Adapter
+ ↓
+Common internal format
+ ↓
+Validation
+ ↓
+Deduplication
+ ↓
+PostgreSQL
+```
+
+Your project specifies historical import, incremental synchronization/webhooks, field mapping, validation, deduplication, and sync status. 
+
+---
+
+# PHASE 9 — Validate the data
+
+Before inserting data, check:
+
+### Required fields
+
+```text
+order_id exists?
+customer_id exists?
+order_value valid?
+order_date valid?
+```
+
+### Data types
+
+```text
+order_value → number
+order_date → datetime
+quantity → integer
+```
+
+### Allowed values
+
+```text
+payment_type:
+    COD
+    PREPAID
+```
+
+### Relationships
+
+```text
+Does customer_id actually exist?
+Does product_id actually exist?
+```
+
+---
+
+# PHASE 10 — Deduplicate
+
+Suppose the source sends:
+
+```text
+O1001
+O1001
+O1001
+```
+
+You shouldn't create three orders.
+
+Use an external platform ID plus store identity:
+
+```text
+(store_id, external_order_id)
+```
+
+as an appropriate uniqueness boundary.
+
+---
+
+# PHASE 11 — Normalize
+
+Different platforms may represent the same thing differently.
+
+For example:
+
+```text
+COD
+cod
+Cash on Delivery
+cash_on_delivery
+```
+
+Convert them to your common internal representation:
+
+```text
+COD
+```
+
+That's the whole point of your **common internal data model**.
+
+---
+
+# PHASE 12 — Handle missing data
+
+You will encounter:
+
+```text
+utm_source = NULL
+pincode = NULL
+phone = NULL
+```
+
+Don't blindly fill everything with fake values.
+
+For example:
+
+```text
+utm_source = NULL
+```
+
+can legitimately mean:
+
+> No attribution information was available.
+
+Your project explicitly says missing UTM information should remain transparent rather than being fabricated. 
+
+---
+
+# PHASE 13 — Store the clean data
+
+At this point:
+
+```text
+RAW DATA
+   ↓
+Validation
+   ↓
+Deduplication
+   ↓
+Normalization
+   ↓
+Missing-data handling
+   ↓
+CLEAN DATABASE
+```
+
+Your PostgreSQL database becomes the **source of record**.
+
+---
+
+# PHASE 14 — Feature engineering
+
+Now we finally start creating ML features.
+
+### RTO features
+
+```text
+order_value
+is_cod
+previous_rto_count
+previous_rto_rate
+customer_order_count
+area/pincode patterns
+```
+
+### Churn features
+
+```text
+recency
+frequency
+monetary_value
+previous_purchase_count
+purchase cadence
+```
+
+### Marketing
+
+```text
+utm_source
+utm_medium
+utm_campaign
+cohort
+repeat_purchase
+LTV
+spend
+```
+
+These are directly aligned with the project's data-processing, RTO, churn, and marketing modules. 
+
+---
+
+# PHASE 15 — Prevent data leakage
+
+This is **very important**.
+
+Suppose:
+
+```text
+Order placed
+     ↓
+Prediction
+     ↓
+RTO happens
+```
+
+The model can use information available **before prediction**.
+
+It cannot use:
+
+```text
+rto_happened = true
+```
+
+as an input to predict RTO.
+
+Correct:
+
+```text
+Information before prediction
+             ↓
+          Features
+             ↓
+         Prediction
+             ↓
+        Actual outcome
+```
+
+Your project specifically requires point-in-time features and FeatureSnapshot records to preserve this distinction. 
+
+---
+
+# PHASE 16 — Create FeatureSnapshot
+
+Store the exact feature state used for each prediction.
+
+```text
+FeatureSnapshot
+----------------
+id
+store_id
+customer_id
+order_id
+prediction_type
+snapshot_time
+features_json
+feature_schema_version
+```
+
+Example:
+
+```json
+{
+  "order_value": 1499,
+  "is_cod": 1,
+  "previous_rto_rate": 0.42,
+  "customer_order_count": 3
+}
+```
+
+This gives you reproducibility and auditability.
+
+---
+
+# PHASE 17 — Create the ML dataset
+
+Now transform:
+
+```text
+FeatureSnapshot
+      ↓
+Training Dataset
+```
+
+Example:
+
+| order_value | is_cod | previous_rto_rate | orders | RTO |
+| ----------: | -----: | ----------------: | -----: | --: |
+|        1499 |      1 |              0.42 |      3 |   1 |
+|         799 |      0 |              0.05 |      8 |   0 |
+|        2499 |      1 |              0.40 |      2 |   1 |
+
+Here:
+
+```text
+Features = everything before prediction
+Label = actual outcome
+```
+
+---
+
+# PHASE 18 — Split the data correctly
+
+Because this is historical prediction:
+
+```text
+Old data
+   ↓
+Training
+
+Newer data
+   ↓
+Testing
+```
+
+Don't randomly mix future data into the past.
+
+Your project calls for time-respecting splits. 
+
+---
+
+# PHASE 19 — Train models
+
+### RTO
+
+```text
+Features
+   ↓
+Logistic Regression
+   ↓
+RTO probability
+```
+
+### Churn
+
+```text
+RFM + purchase history
+   ↓
+Logistic Regression / SGD
+   ↓
+Churn probability
+```
+
+The project specifies these approaches. 
+
+---
+
+# PHASE 20 — Evaluate
+
+Don't just say:
+
+> Accuracy = 90%
+
+Your project expects metrics such as:
+
+```text
+Precision
+Recall
+F1
+ROC-AUC
+```
+
+and comparison against simple baselines. 
+
+For RTO/churn, class imbalance also matters.
+
+---
+
+# PHASE 21 — Prediction → Explanation → ₹ Impact
+
+Once the model works:
+
+```text
+Prediction
+   ↓
+Probability + Risk
+   ↓
+Explanation
+   ↓
+₹ Impact
+   ↓
+Recommendation
+```
+
+Your DFD explicitly contains this chain. 
+
+---
+
+# PHASE 22 — Recommendation engine
+
+Use versioned rules:
+
+```text
+IF
+    RTO probability > threshold
+AND
+    payment = COD
+
+THEN
+    recommendation
+```
+
+The important thing is that the rule itself should be stored/versioned so you know **which rule generated which recommendation**.
+
+---
+
+# PHASE 23 — Incremental learning
+
+Only after the basic model works:
+
+```text
+Prediction
+    ↓
+Actual outcome arrives
+    ↓
+New labeled example
+    ↓
+SGD update
+    ↓
+New model version
+```
+
+Your project specifies this prediction → outcome → update → validation/versioning workflow. 
+
+---
+
+# PHASE 24 — Simulated FedAvg
+
+Then implement:
+
+```text
+Merchant A → Local weights ┐
+Merchant B → Local weights ├→ Aggregation
+Merchant C → Local weights ┘
+                              ↓
+                       Aggregated weights
+```
+
+Your project calls this **simulated FedAvg**, not a production distributed federated-learning system. 
+
+---
+
+# PHASE 25 — Security and testing
+
+Finally test:
+
+```text
+Store A cannot access Store B
+```
+
+and:
+
+```text
+Authentication
+RBAC
+store_id isolation
+credential protection
+webhook verification
+audit logging
+API security
+```
+
+Your project identifies `store_id` isolation, encrypted credentials, RBAC, audit logs, webhook verification, HTTPS/rate limiting, and internal FastAPI access as security requirements. 
+
+---
+
+# ⭐ The simplest way to remember everything
+
+Think of your project as **5 big layers**:
+
+```text
+                    MERCHANT CO-PILOT
+
+┌─────────────────────────────────────────────┐
+│ 1. DATA COLLECTION                          │
+│ Shopify / WooCommerce / Marketing /        │
+│ Synthetic development data                 │
+└──────────────────────┬──────────────────────┘
+                       ↓
+┌─────────────────────────────────────────────┐
+│ 2. DATABASE                                 │
+│ Store / Customer / Order / Product /       │
+│ Payment / Fulfillment / Marketing           │
+└──────────────────────┬──────────────────────┘
+                       ↓
+┌─────────────────────────────────────────────┐
+│ 3. DATA PREPARATION                         │
+│ Validate → Deduplicate → Normalize →       │
+│ Missing values → Feature Engineering        │
+└──────────────────────┬──────────────────────┘
+                       ↓
+┌─────────────────────────────────────────────┐
+│ 4. ML                                       │
+│ FeatureSnapshot → RTO / Churn → Evaluation│
+└──────────────────────┬──────────────────────┘
+                       ↓
+┌─────────────────────────────────────────────┐
+│ 5. BUSINESS INTELLIGENCE                    │
+│ Explanation → ₹ Impact → Recommendation    │
+│ → Incremental Learning → FedAvg             │
+└─────────────────────────────────────────────┘
+```
+
+## And **right now**, your work should be:
+
+**Step 1:** Data Requirements
+**Step 2:** Data Dictionary
+**Step 3:** ER Diagram
+**Step 4:** Database Schema
+**Step 5:** PostgreSQL + Prisma
+**Step 6:** Synthetic Data Generation
+**Step 7:** Data Import Pipeline
+
+**Don't start with the ML model yet.**
+
+The next concrete artifact I would make is the **complete Data Dictionary for your project**, because once that is finalized, the ER diagram and Prisma schema become much easier and you won't keep changing your database later.
