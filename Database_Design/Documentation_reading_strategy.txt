@@ -1,0 +1,511 @@
+Yes — for your **Merchant Co-Pilot**, documentation should be your main tool for doing the **data enquiry** before you design the database or start collecting data.
+
+The important idea is:
+
+> **Don't start by asking “What tables should I create?” Start by asking “What data does each platform actually provide, in what form, through which API, with what restrictions?”**
+
+### 1. Start with official documentation
+
+For each platform, collect documentation for:
+
+| What you need to investigate | Shopify                         | WooCommerce                   |
+| ---------------------------- | ------------------------------- | ----------------------------- |
+| API type                     | Admin GraphQL API               | REST API                      |
+| Customers                    | Customer                        | Customers                     |
+| Orders                       | Order                           | Orders                        |
+| Products                     | Product / Product Variant       | Products / Variations         |
+| Order items                  | Line Item                       | Order Line Items              |
+| Payments                     | Order Transaction               | Payment/order data            |
+| Shipping                     | Shipping Address / Fulfillment  | Shipping/Billing + order data |
+| Fulfillment                  | Fulfillment / Fulfillment Order | Order fulfillment/status data |
+| Refunds                      | Refund/transactions             | Refunds                       |
+| Continuous updates           | Webhooks                        | Webhooks                      |
+| Authentication               | App/access token + scopes       | API keys                      |
+| Historical data              | API access/scopes/limits        | API pagination/access         |
+| Rate limits                  | API limits                      | API limits                    |
+
+Don't try to read the entire documentation. **Search the documentation for the exact data object you need.**
+
+---
+
+# 2. Make a "Data Enquiry Sheet"
+
+This is probably the **most important document you should create now**.
+
+Create an Excel/Google Sheet like this:
+
+| Business requirement | Data needed        | Platform object   | Field         | Data type | Required? | Source            | API              | Can we calculate it? |
+| -------------------- | ------------------ | ----------------- | ------------- | --------- | --------- | ----------------- | ---------------- | -------------------- |
+| Customer analysis    | Customer ID        | Customer          | `id`          | ID        | Yes       | Shopify           | Customer API     | No                   |
+| Customer analysis    | Customer email     | Customer          | `email`       | String    | Maybe     | Shopify           | Customer API     | No                   |
+| RTO prediction       | Order value        | Order             | `total_price` | Decimal   | Yes       | Shopify           | Order API        | No                   |
+| RTO prediction       | Payment type       | Order/Transaction | payment data  | String    | Yes       | Platform          | API              | Maybe                |
+| RTO prediction       | Previous RTO count | Orders            | —             | Integer   | No        | Our system        | —                | **Yes**              |
+| Churn prediction     | Customer recency   | Orders            | —             | Integer   | No        | Our system        | —                | **Yes**              |
+| Marketing            | Campaign           | Marketing/UTM     | campaign      | String    | No        | Marketing source  | API/webhook/etc. | No                   |
+| Prediction           | RTO probability    | —                 | —             | Decimal   | —         | Merchant Co-Pilot | ML               | **Generated**        |
+
+This sheet answers:
+
+**What do we need → where does it come from → how do we obtain it → what do we calculate ourselves?**
+
+---
+
+# 3. Read documentation object-by-object
+
+For example, suppose you're investigating **Shopify Orders**.
+
+Don't just read:
+
+> "Shopify Order API"
+
+Instead extract information systematically.
+
+### Ask these questions for every object
+
+**A. What is the object?**
+
+Example:
+
+`Order`
+
+**B. What information does it contain?**
+
+For example:
+
+* order ID
+* customer
+* order date
+* currency
+* total
+* line items
+* shipping information
+* payment/transaction information
+* fulfillment information
+* status
+
+**C. What is each field called?**
+
+Example:
+
+```text
+id
+createdAt
+currencyCode
+totalPriceSet
+customer
+lineItems
+shippingAddress
+fulfillments
+transactions
+```
+
+**D. What type is it?**
+
+```text
+id             → ID
+createdAt      → DateTime
+currencyCode   → Enum/String
+total          → Decimal
+customer       → Object
+lineItems      → List
+```
+
+**E. Is it always available?**
+
+This is extremely important.
+
+Some fields may:
+
+* require permissions
+* be null
+* depend on order state
+* depend on configuration
+* require a particular API scope
+
+**F. How do we retrieve it?**
+
+For example:
+
+```text
+GraphQL query
+REST endpoint
+Webhook
+```
+
+**G. How often can we retrieve it?**
+
+Check:
+
+* pagination
+* rate limits
+* historical-data restrictions
+* incremental synchronization
+* webhooks
+
+---
+
+# 4. Don't confuse "field available" with "data required"
+
+This is a huge point for your project.
+
+Suppose Shopify gives you:
+
+```text
+order.createdAt
+order.totalPrice
+order.customer
+order.lineItems
+```
+
+Your project may need:
+
+```text
+customer_recency
+customer_frequency
+customer_monetary_value
+previous_rto_rate
+customer_order_count
+```
+
+Those aren't necessarily Shopify fields.
+
+You **calculate them**.
+
+For example:
+
+```text
+customer_recency
+        ↓
+latest_order_date - prediction_date
+```
+
+and:
+
+```text
+customer_frequency
+        ↓
+number of previous orders
+```
+
+and:
+
+```text
+previous_rto_rate
+        ↓
+previous RTO orders / previous orders
+```
+
+So your enquiry sheet should explicitly distinguish:
+
+### Direct data
+
+Comes from Shopify/WooCommerce.
+
+### Derived data
+
+Calculated by Merchant Co-Pilot.
+
+### External data
+
+Comes from marketing platforms or other sources.
+
+### Generated data
+
+Produced by your ML/decision system.
+
+Your DFD already follows this architecture: commerce/customer data is stored in D2, features/predictions/decisions in D3, marketing spend in D6, while models/rules and audit/security information are separate stores. 
+
+---
+
+# 5. Convert documentation into your Common Data Model
+
+This is the next step.
+
+Shopify and WooCommerce use different names and structures.
+
+For example:
+
+```text
+SHOPIFY                         WOOCommerce
+------------------------------------------------
+customer.id             →       customer.id
+order.id                →       order.id
+order.createdAt         →       order.date_created
+order.totalPrice        →       order.total
+lineItems               →       line_items
+shippingAddress         →       shipping
+```
+
+Your database should **not simply copy Shopify's database structure**.
+
+Instead create your own common model:
+
+```text
+Customer
+Order
+OrderItem
+Product
+Payment
+Fulfillment
+Refund
+MarketingCampaign
+...
+```
+
+Then build adapters:
+
+```text
+Shopify API
+     ↓
+Shopify Adapter
+     ↓
+Common Data Model
+     ↓
+PostgreSQL
+```
+
+and:
+
+```text
+WooCommerce API
+     ↓
+WooCommerce Adapter
+     ↓
+Common Data Model
+     ↓
+PostgreSQL
+```
+
+That fits your project requirement for a common internal data model across Shopify/WooCommerce. 
+
+---
+
+# 6. Create a Data Dictionary
+
+After the enquiry sheet, create a proper **Data Dictionary**.
+
+Example:
+
+| Field                | Meaning                   | Type     | Source   | Example      | Nullable | Used for          |
+| -------------------- | ------------------------- | -------- | -------- | ------------ | -------- | ----------------- |
+| `store_id`           | Merchant store identifier | UUID     | Co-Pilot | `...`        | No       | Tenant isolation  |
+| `customer_id`        | Customer identifier       | String   | Platform | `C123`       | No       | Customer analysis |
+| `order_id`           | Order identifier          | String   | Platform | `O456`       | No       | Order analysis    |
+| `order_date`         | Order creation time       | DateTime | Platform | `2026-09-01` | No       | RFM               |
+| `order_value`        | Order monetary value      | Decimal  | Platform | `1499.00`    | No       | RTO               |
+| `payment_method`     | Payment method            | String   | Platform | `COD`        | Yes      | RTO               |
+| `delivery_area`      | Delivery location         | String   | Platform | `Lucknow`    | Yes      | RTO               |
+| `previous_rto_count` | Previous RTO orders       | Integer  | Derived  | `2`          | Yes      | RTO               |
+| `customer_recency`   | Days since last purchase  | Integer  | Derived  | `35`         | Yes      | Churn             |
+
+Your project's specification specifically calls for point-in-time features such as RFM, previous RTO count, order value, payment type and area/pincode patterns. 
+
+---
+
+# 7. Then create the Field Mapping
+
+This is where documentation becomes useful for actual development.
+
+Example:
+
+| Your field       | Shopify                  | WooCommerce        | Transformation                      |
+| ---------------- | ------------------------ | ------------------ | ----------------------------------- |
+| `customer_id`    | Customer.id              | customer.id        | Direct                              |
+| `order_id`       | Order.id                 | Order.id           | Direct                              |
+| `order_date`     | Order.createdAt          | Order.date_created | Convert to UTC                      |
+| `order_value`    | Order.total              | Order.total        | Decimal                             |
+| `currency`       | currencyCode             | currency           | Standardize                         |
+| `customer_email` | Customer.email           | customer.email     | Direct                              |
+| `shipping_city`  | ShippingAddress.city     | shipping.city      | Direct                              |
+| `payment_method` | Transaction/payment data | Order payment data | Normalize                           |
+| `rto_status`     | —                        | —                  | **Need business definition/source** |
+
+That last row is important.
+
+If documentation doesn't give you a clean **RTO** field, don't invent one.
+
+Instead investigate:
+
+> "How will Merchant Co-Pilot determine that an order was actually returned to origin?"
+
+That may require combining fulfillment, shipment, order-status, cancellation/refund, or external logistics information depending on the platform and your business definition.
+
+---
+
+# 8. Then investigate the API mechanics
+
+For every data source, document:
+
+```text
+1. Authentication
+2. Authorization/scopes
+3. API endpoint/query
+4. Request parameters
+5. Response structure
+6. Pagination
+7. Rate limits
+8. Historical data availability
+9. Incremental synchronization
+10. Webhooks
+11. Error handling
+12. Retry strategy
+13. Data deletion/update behavior
+14. Versioning
+```
+
+This becomes your **Data Collection Specification**.
+
+---
+
+# 9. Then test with real API responses
+
+Documentation tells you what *should* be available.
+
+Your next step is to see the actual JSON response.
+
+For example:
+
+```text
+Documentation
+      ↓
+API request
+      ↓
+Actual JSON
+      ↓
+Inspect fields
+      ↓
+Compare with Data Dictionary
+      ↓
+Mapping
+      ↓
+Database
+```
+
+This is where tools such as Postman or the platform's API explorer become useful.
+
+You should save a few **sanitized sample responses** for development.
+
+---
+
+# 10. Then design your database
+
+Only after the previous work should you finalize the database.
+
+For your project, your DFD already gives you six logical data stores:
+
+```text
+D1 Merchant & Store Data
+D2 Commerce & Customer Data
+D3 Feature, Prediction & Decision Data
+D4 Model & Rule Versions
+D5 Audit & Security Logs
+D6 Marketing Spend Data
+```
+
+
+
+Then turn those logical stores into actual PostgreSQL tables.
+
+For example:
+
+```text
+D1
+ ├── users
+ └── stores
+
+D2
+ ├── customers
+ ├── orders
+ ├── order_items
+ ├── products
+ ├── payments
+ ├── fulfillments
+ └── refunds
+
+D3
+ ├── feature_snapshots
+ ├── predictions
+ └── recommendations
+
+D4
+ ├── models
+ ├── model_versions
+ └── rules
+
+D5
+ └── audit_logs
+
+D6
+ ├── marketing_campaigns
+ ├── spend_records
+ └── attribution
+```
+
+The exact table list should be finalized from your requirements and data mapping, rather than blindly copying the DFD labels.
+
+---
+
+# 11. Your complete process should be this
+
+I'd recommend keeping this exact sequence for your project:
+
+```text
+PROJECT REQUIREMENTS
+        ↓
+DFD / USE CASE
+        ↓
+DATA REQUIREMENTS
+        ↓
+SHOPIFY DOCUMENTATION ───┐
+                         │
+WOOCOMMERCE DOCUMENTATION ┤
+                         ↓
+                   DATA ENQUIRY
+                         ↓
+                  DATA INVENTORY
+                         ↓
+                  DATA DICTIONARY
+                         ↓
+                  FIELD MAPPING
+                         ↓
+              COMMON DATA MODEL
+                         ↓
+                    ER DIAGRAM
+                         ↓
+                 DATABASE DESIGN
+                         ↓
+              API DATA COLLECTION
+                         ↓
+                 RAW DATA TEST
+                         ↓
+              CLEANING / VALIDATION
+                         ↓
+             NORMALIZED DATABASE
+                         ↓
+              FEATURE ENGINEERING
+                         ↓
+                  ML DATASET
+                         ↓
+              MODEL / PREDICTION
+                         ↓
+           EXPLANATION / ₹ IMPACT
+                         ↓
+                RECOMMENDATION
+                         ↓
+              INCREMENTAL LEARNING
+```
+
+Your DFD's Level-1 flow essentially follows this broader logic: onboarding/integration → feature/risk prediction → explainability/impact/decisioning → learning/governance. 
+
+### The 5 documents I would create **right now**
+
+1. **Data Requirements Document**
+2. **Shopify Data Enquiry Sheet**
+3. **WooCommerce Data Enquiry Sheet**
+4. **Common Data Dictionary**
+5. **Shopify ↔ WooCommerce Field Mapping**
+
+Once these are complete, **then** make the final ER diagram and PostgreSQL schema.
+
+That will prevent the classic mistake of designing 30 tables first and discovering later that the platform doesn't actually provide half the fields you assumed. 😄

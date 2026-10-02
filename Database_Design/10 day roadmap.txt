@@ -1,0 +1,228 @@
+Yes — now I understand the target correctly.
+
+**Merchant Co-Pilot is a standalone analytics web app** that a merchant can connect to either **Shopify or WooCommerce**. It should pull the merchant's commerce data, normalize it, analyze it, and show insights.
+
+So Shopify/WooCommerce are **data sources/integrations**, not the product itself.
+
+### Correct architecture
+
+```text
+              ┌─────────────────┐
+              │     Shopify     │
+              │     Merchant    │
+              └────────┬────────┘
+                       │
+                       │ API / Webhooks
+                       ↓
+              ┌─────────────────┐
+              │                 │
+              │ Merchant        │
+              │ Co-Pilot        │
+              │   Web App       │
+              │                 │
+              └────────┬────────┘
+                       │
+                       ↓
+              ┌─────────────────┐
+              │   PostgreSQL    │
+              │ Normalized Data │
+              └────────┬────────┘
+                       ↓
+              ┌─────────────────┐
+              │ Feature         │
+              │ Engineering     │
+              └────────┬────────┘
+                       ↓
+       ┌───────────────┼────────────────┐
+       ↓               ↓                ↓
+    RTO Risk        Churn          Marketing
+    Analysis       Analysis         Analysis
+       │               │                │
+       └───────────────┼────────────────┘
+                       ↓
+              Explainability
+                       ↓
+                 ₹ Impact
+                       ↓
+               Recommendations
+                       ↓
+                  Dashboard
+                       
+              ┌─────────────────┐
+              │   WooCommerce  │
+              │    Merchant    │
+              └────────┬────────┘
+                       │
+                       │ REST API / Webhooks
+                       └──────→ Same pipeline
+```
+
+Your supplied DFD actually fits this concept well: the e-commerce platforms are external entities, while Merchant Co-Pilot contains the processing, prediction, explanation, impact, recommendation and learning modules. 
+
+# So your 10-day roadmap should be this
+
+| Day    | Focus                       | What you learn/build                                                              | Output                        |
+| ------ | --------------------------- | --------------------------------------------------------------------------------- | ----------------------------- |
+| **1**  | Product + data requirements | What analytics the merchant needs and what raw data each feature requires         | Data Requirement Document     |
+| **2**  | Shopify research            | Shopify API, objects, fields, authentication, permissions, pagination, webhooks   | Shopify Data Inventory        |
+| **3**  | WooCommerce research        | REST API, objects, fields, authentication, pagination, webhooks                   | WooCommerce Data Inventory    |
+| **4**  | Data mapping                | Map both platforms into one common data model                                     | Shopify ↔ WooCommerce Mapping |
+| **5**  | Data dictionary             | Define every field, type, source, meaning, validation                             | Data Dictionary               |
+| **6**  | Database design             | Design D1–D6, entities, relationships, PK/FK, `store_id`                          | ERD + DB Schema               |
+| **7**  | Integration architecture    | Design Shopify/WooCommerce connectors and ingestion pipeline                      | Integration Architecture      |
+| **8**  | Data collection prototype   | Connect a development/test store and pull real API data                           | Raw API → Database            |
+| **9**  | Data preparation            | Cleaning, normalization, deduplication, historical snapshots, feature preparation | Clean Dataset                 |
+| **10** | Analytics foundation        | Build first analytics: orders, customers, revenue, RFM, basic risk inputs         | Analytics MVP                 |
+
+## The key thing you're building on Days 2–4
+
+You need an **adapter architecture**:
+
+```text
+Shopify
+   ↓
+Shopify Adapter
+   ↓
+                  ┌──────────────────────┐
+                  │ Common Data Model    │
+                  │                      │
+                  │ Customer             │
+                  │ Order                │
+                  │ OrderItem            │
+                  │ Product              │
+                  │ Payment              │
+                  │ Fulfillment          │
+                  │ Refund               │
+                  └──────────┬───────────┘
+                             ↓
+                         PostgreSQL
+                             ↑
+                  ┌──────────┴───────────┐
+                  │ Common Data Model    │
+                  └──────────┬───────────┘
+                             ↑
+                    WooCommerce Adapter
+                             ↑
+                       WooCommerce
+```
+
+This is **very important**.
+
+You don't want your ML/analytics code saying:
+
+```text
+if Shopify:
+    use Shopify field
+else:
+    use WooCommerce field
+```
+
+everywhere.
+
+Instead:
+
+```text
+Shopify ──→ Adapter ──→ Common Model
+WooCommerce ──→ Adapter ──→ Common Model
+```
+
+Then your analytics works on the common model.
+
+---
+
+# Your data pipeline
+
+Your actual project should eventually look like:
+
+```text
+1. CONNECT
+   ↓
+2. AUTHENTICATE
+   ↓
+3. IMPORT HISTORICAL DATA
+   ↓
+4. CONTINUOUS SYNC
+   ↓
+5. VALIDATE
+   ↓
+6. NORMALIZE
+   ↓
+7. STORE
+   ↓
+8. FEATURE ENGINEERING
+   ↓
+9. ANALYTICS / ML
+   ↓
+10. EXPLANATION
+   ↓
+11. ₹ IMPACT
+   ↓
+12. RECOMMENDATION
+   ↓
+13. DASHBOARD
+```
+
+The supplied project documentation specifically describes importing/normalizing orders, customers, products and fulfillment data, storing it with `store_id`, creating point-in-time features, then feeding RTO/churn/marketing analysis and recommendations. 
+
+## And this changes what you should research
+
+Don't research **every single Shopify/WooCommerce field**.
+
+For each analytics feature, work backward:
+
+### Example: RTO prediction
+
+```text
+RTO Prediction
+      ↓
+What features do I need?
+      ↓
+order value
+payment type
+previous RTO behavior
+delivery area
+customer history
+      ↓
+What raw data produces those features?
+      ↓
+Orders
+Customers
+Payments
+Fulfillment
+      ↓
+Which Shopify/WooCommerce APIs provide them?
+```
+
+Your documentation research therefore becomes:
+
+**Analytics requirement → feature requirement → raw data requirement → platform API → database field**
+
+That is the correct approach for your project.
+
+### Your first 10-day milestone
+
+At the end of Day 10, you should **not** necessarily have the entire application.
+
+You should have:
+
+```text
+                    MERCHANT CO-PILOT
+                           │
+              ┌────────────┴────────────┐
+              ↓                         ↓
+          Shopify                   WooCommerce
+              ↓                         ↓
+        API Connector             API Connector
+              ↓                         ↓
+              └────────────┬────────────┘
+                           ↓
+                  Common Data Model
+                           ↓
+                      PostgreSQL
+                           ↓
+                  Basic Analytics
+```
+
+Then Days 11+ can focus on **feature engineering → RTO/churn models → explainability → ₹ impact → recommendations → dashboard → learning**.
+
+And your existing Excel workbook is still useful — we just need to treat **Shopify and WooCommerce as two integration sources feeding the same data model**, rather than making the project Shopify-specific.
